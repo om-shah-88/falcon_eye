@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FalconEye — Vehicle Tracker</title>
+  <meta name="description" content="AI-powered vehicle re-identification using vector similarity search across city-wide camera networks.">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg-primary: #0a0e1a;
+      --bg-secondary: #111827;
+      --bg-card: rgba(17, 24, 39, 0.7);
+      --bg-glass: rgba(255, 255, 255, 0.03);
+      --border: rgba(255, 255, 255, 0.06);
+      --border-hover: rgba(255, 255, 255, 0.12);
+      --text-primary: #f0f4f8;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --accent: #3b82f6;
+      --accent-glow: rgba(59, 130, 246, 0.3);
+      --accent-2: #8b5cf6;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --danger-soft: rgba(239, 68, 68, 0.15);
+      --success-soft: rgba(16, 185, 129, 0.15);
+      --radius: 16px;
+      --radius-sm: 10px;
+      --radius-xs: 6px;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Animated background ── */
+    .bg-grid {
+      position: fixed;
+      inset: 0;
+      background-image:
+        radial-gradient(circle at 20% 30%, rgba(59, 130, 246, 0.06) 0%, transparent 50%),
+        radial-gradient(circle at 80% 70%, rgba(139, 92, 246, 0.05) 0%, transparent 50%),
+        radial-gradient(circle at 50% 50%, rgba(16, 185, 129, 0.03) 0%, transparent 60%);
+      z-index: 0;
+      animation: bgPulse 8s ease-in-out infinite alternate;
+    }
+    @keyframes bgPulse {
+      0% { opacity: 0.7; }
+      100% { opacity: 1; }
+    }
+
+    .container {
+      position: relative;
+      z-index: 1;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 40px 24px;
+    }
+
+    /* ── Header ── */
+    .header {
+      text-align: center;
+      margin-bottom: 48px;
+    }
+    .header-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 16px;
+      background: var(--bg-glass);
+      border: 1px solid var(--border);
+      border-radius: 100px;
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-bottom: 20px;
+      backdrop-filter: blur(10px);
+    }
+    .header-badge .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--success);
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+      50% { opacity: 0.8; box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+    }
+    .header h1 {
+      font-size: 48px;
+      font-weight: 800;
+      letter-spacing: -1.5px;
+      background: linear-gradient(135deg, #f0f4f8 0%, #94a3b8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 12px;
+    }
+    .header h1 .falcon {
+      background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+      -webkit-background-clip: text;
+      background-clip: text;
+    }
+    .header p {
+      font-size: 16px;
+      color: var(--text-secondary);
+      max-width: 500px;
+      margin: 0 auto;
+      line-height: 1.6;
+    }
+
+    /* ── Search Card ── */
+    .search-card {
+      background: var(--bg-card);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 36px;
+      margin-bottom: 32px;
+      transition: border-color 0.3s;
+    }
+    .search-card:hover { border-color: var(--border-hover); }
+
+    .search-card h2 {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .search-card h2 .icon {
+      width: 36px; height: 36px;
+      border-radius: var(--radius-xs);
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 20px;
+      margin-bottom: 24px;
+    }
+
+    .form-group { display: flex; flex-direction: column; gap: 7px; }
+    .form-group label {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .form-group select,
+    .form-group input {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xs);
+      padding: 12px 16px;
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .form-group select:focus,
+    .form-group input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+    .form-group select { cursor: pointer; appearance: none; }
+    .form-group select option { background: var(--bg-secondary); }
+
+    .free-text-group {
+      grid-column: 1 / -1;
+    }
+    .free-text-group input {
+      width: 100%;
+    }
+
+    .btn-search {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 32px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: #fff;
+      font-family: inherit;
+      font-size: 15px;
+      font-weight: 600;
+      border: none;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.3s, opacity 0.2s;
+      box-shadow: 0 4px 20px var(--accent-glow);
+    }
+    .btn-search:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 30px var(--accent-glow);
+    }
+    .btn-search:active { transform: translateY(0); }
+    .btn-search:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .btn-search .spinner {
+      width: 18px; height: 18px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      display: none;
+    }
+    .btn-search.loading .spinner { display: block; }
+    .btn-search.loading .btn-text { display: none; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Marker chips ── */
+    .markers-container {
+      grid-column: 1 / -1;
+    }
+    .marker-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .marker-chip {
+      padding: 7px 14px;
+      border-radius: 100px;
+      border: 1px solid var(--border);
+      background: var(--bg-glass);
+      color: var(--text-secondary);
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+      user-select: none;
+    }
+    .marker-chip:hover { border-color: var(--accent); color: var(--text-primary); }
+    .marker-chip.active {
+      background: rgba(59, 130, 246, 0.15);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    /* ── Results ── */
+    .results-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .results-header h2 {
+      font-size: 20px;
+      font-weight: 700;
+    }
+    .results-meta {
+      display: flex;
+      gap: 16px;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .results-meta span {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .result-card {
+      background: var(--bg-card);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px;
+      margin-bottom: 16px;
+      transition: border-color 0.3s, transform 0.2s;
+      animation: fadeSlideIn 0.4s ease-out both;
+    }
+    .result-card:hover {
+      border-color: var(--border-hover);
+      transform: translateY(-2px);
+    }
+
+    @keyframes fadeSlideIn {
+      from { opacity: 0; transform: translateY(16px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .result-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .result-rank {
+      width: 44px; height: 44px;
+      border-radius: var(--radius-xs);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .rank-1 { background: linear-gradient(135deg, #f59e0b, #d97706); color: #fff; }
+    .rank-2 { background: linear-gradient(135deg, #94a3b8, #64748b); color: #fff; }
+    .rank-3 { background: linear-gradient(135deg, #b45309, #92400e); color: #fff; }
+    .rank-default { background: var(--bg-secondary); color: var(--text-secondary); border: 1px solid var(--border); }
+
+    .result-identity { flex: 1; min-width: 200px; }
+    .result-identity h3 {
+      font-size: 17px;
+      font-weight: 600;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .vehicle-id-badge {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      padding: 3px 8px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xs);
+      color: var(--text-muted);
+    }
+    .result-identity .plate {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      color: var(--accent);
+    }
+
+    .probability-badge {
+      text-align: center;
+    }
+    .probability-value {
+      font-size: 28px;
+      font-weight: 800;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .probability-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .prob-high { color: var(--success); }
+    .prob-medium { color: var(--warning); }
+    .prob-low { color: var(--text-secondary); }
+
+    /* ── Stats row ── */
+    .result-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .stat-box {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xs);
+      padding: 14px 16px;
+    }
+    .stat-box .stat-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+    .stat-box .stat-value {
+      font-size: 15px;
+      font-weight: 600;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* ── Camera trail ── */
+    .camera-trail {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+    .trail-node {
+      padding: 6px 12px;
+      border-radius: var(--radius-xs);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      font-weight: 500;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      transition: all 0.2s;
+    }
+    .trail-node:last-child {
+      background: rgba(59, 130, 246, 0.15);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .trail-arrow {
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+
+    /* ── Sightings expand ── */
+    .sightings-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 16px;
+      padding: 8px 16px;
+      background: var(--bg-glass);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xs);
+      color: var(--text-secondary);
+      font-family: inherit;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .sightings-toggle:hover {
+      border-color: var(--accent);
+      color: var(--text-primary);
+    }
+    .sightings-list {
+      display: none;
+      margin-top: 12px;
+    }
+    .sightings-list.open { display: block; }
+    .sighting-row {
+      display: grid;
+      grid-template-columns: 80px 100px 1fr auto;
+      gap: 16px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+      align-items: center;
+    }
+    .sighting-row:last-child { border-bottom: none; }
+    .sighting-camera {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 500;
+      color: var(--accent);
+    }
+    .sighting-time {
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--text-secondary);
+    }
+    .sighting-desc {
+      color: var(--text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .sighting-score {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      padding: 3px 8px;
+      border-radius: var(--radius-xs);
+      background: var(--success-soft);
+      color: var(--success);
+    }
+
+    /* ── Empty state ── */
+    .empty-state {
+      text-align: center;
+      padding: 80px 24px;
+      color: var(--text-muted);
+    }
+    .empty-state .icon { font-size: 56px; margin-bottom: 16px; }
+    .empty-state h3 { font-size: 20px; color: var(--text-secondary); margin-bottom: 8px; }
+
+    /* ── Query badge ── */
+    .query-display {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      background: var(--bg-glass);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xs);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      color: var(--accent);
+      margin-bottom: 24px;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 640px) {
+      .header h1 { font-size: 32px; }
+      .search-card { padding: 24px; }
+      .result-card { padding: 20px; }
+      .form-grid { grid-template-columns: 1fr; }
+      .sighting-row { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-grid"></div>
+  <div class="container">
+
+    <!-- Header -->
+    <header class="header">
+      <div class="header-badge">
+        <span class="dot"></span>
+        15,000 captures indexed · 10 camera nodes
+      </div>
+      <h1><span class="falcon">Falcon</span>Eye</h1>
+      <p>AI-powered vehicle re-identification. Describe your vehicle and we'll trace it across the city camera network.</p>
+    </header>
+
+    <!-- Search Form -->
+    <section class="search-card" id="search-section">
+      <h2><span class="icon">🔍</span> Describe Your Vehicle</h2>
+      <form id="search-form">
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="color">Color</label>
+            <select id="color" name="color">
+              <option value="">Any color</option>
+              <option value="Black">Black</option>
+              <option value="White">White</option>
+              <option value="Silver">Silver</option>
+              <option value="Red">Red</option>
+              <option value="Blue">Blue</option>
+              <option value="Gray">Gray</option>
+              <option value="Green">Green</option>
+              <option value="Maroon">Maroon</option>
+              <option value="Navy">Navy</option>
+              <option value="Beige">Beige</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="body_type">Body Type</label>
+            <select id="body_type" name="body_type">
+              <option value="">Any type</option>
+              <option value="Sedan">Sedan</option>
+              <option value="SUV">SUV</option>
+              <option value="Truck">Truck</option>
+              <option value="Hatchback">Hatchback</option>
+              <option value="Minivan">Minivan</option>
+              <option value="Coupe">Coupe</option>
+              <option value="Convertible">Convertible</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="license_plate">License Plate</label>
+            <input type="text" id="license_plate" name="license_plate" placeholder="e.g. ABC-1234" autocomplete="off">
+          </div>
+
+          <div class="form-group markers-container">
+            <label>Unique Markers</label>
+            <div class="marker-chips" id="marker-chips">
+              <span class="marker-chip" data-marker="roof_rack">🔲 Roof Rack</span>
+              <span class="marker-chip" data-marker="bumper_sticker">🏷️ Bumper Sticker</span>
+              <span class="marker-chip" data-marker="dent">💥 Dent</span>
+              <span class="marker-chip" data-marker="custom_rims">⚙️ Custom Rims</span>
+              <span class="marker-chip" data-marker="tinted_windows">🕶️ Tinted Windows</span>
+              <span class="marker-chip" data-marker="flag_decal">🚩 Flag Decal</span>
+              <span class="marker-chip" data-marker="bike_rack">🚲 Bike Rack</span>
+              <span class="marker-chip" data-marker="trailer_hitch">🔗 Trailer Hitch</span>
+              <span class="marker-chip" data-marker="mud_flaps">🛡️ Mud Flaps</span>
+              <span class="marker-chip" data-marker="racing_stripe">🏁 Racing Stripe</span>
+            </div>
+          </div>
+
+          <div class="form-group free-text-group">
+            <label for="free_text">Additional Description (optional)</label>
+            <input type="text" id="free_text" name="free_text" placeholder="e.g. scratched rear bumper, dark tinted windows …" autocomplete="off">
+          </div>
+        </div>
+
+        <button type="submit" class="btn-search" id="btn-search">
+          <span class="spinner"></span>
+          <span class="btn-text">🦅 Search Camera Network</span>
+        </button>
+      </form>
+    </section>
+
+    <!-- Results -->
+    <section id="results-section" style="display:none;">
+      <div class="query-display" id="query-display"></div>
+
+      <div class="results-header">
+        <h2 id="results-title">Results</h2>
+        <div class="results-meta">
+          <span id="meta-captures">📸 —</span>
+          <span id="meta-matches">🚗 —</span>
+          <span id="meta-time">⏱️ —</span>
+        </div>
+      </div>
+
+      <div id="results-list"></div>
+    </section>
+
+    <!-- Empty / Initial State -->
+    <section id="empty-state" class="empty-state">
+      <div class="icon">🦅</div>
+      <h3>Describe your vehicle to begin tracking</h3>
+      <p>Fill in the form above — even partial descriptions work.</p>
+    </section>
+  </div>
+
+  <script>
+    // ── Marker chip selection ──
+    const activeMarkers = new Set();
+    document.querySelectorAll('.marker-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        const marker = chip.dataset.marker;
+        if (activeMarkers.has(marker)) {
+          activeMarkers.delete(marker);
+          chip.classList.remove('active');
+        } else {
+          activeMarkers.add(marker);
+          chip.classList.add('active');
+        }
+      });
+    });
+
+    // ── Search ──
+    const form = document.getElementById('search-form');
+    const btn = document.getElementById('btn-search');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      btn.classList.add('loading');
+      btn.disabled = true;
+
+      const payload = {
+        color: document.getElementById('color').value,
+        body_type: document.getElementById('body_type').value,
+        license_plate: document.getElementById('license_plate').value.trim(),
+        markers: Array.from(activeMarkers).join(', '),
+        free_text: document.getElementById('free_text').value.trim(),
+        num_results: 50,
+      };
+
+      const startTime = performance.now();
+
+      // Use explicit base URL — works whether page is served via FastAPI or opened as file
+      const API_BASE = window.location.protocol === 'file:'
+        ? 'http://localhost:8000'
+        : window.location.origin;
+
+      try {
+        const resp = await fetch(`${API_BASE}/api/search`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!resp.ok) {
+          const errText = await resp.text();
+          throw new Error(`Server returned ${resp.status}: ${errText.slice(0, 200)}`);
+        }
+        const data = await resp.json();
+        const elapsed = ((performance.now() - startTime) / 1000).toFixed(2);
+        renderResults(data, elapsed);
+      } catch (err) {
+        // Show error in UI instead of alert
+        document.getElementById('empty-state').style.display = 'none';
+        const section = document.getElementById('results-section');
+        section.style.display = 'block';
+        document.getElementById('results-title').textContent = 'Connection Error';
+        document.getElementById('meta-captures').textContent = '';
+        document.getElementById('meta-matches').textContent = '';
+        document.getElementById('meta-time').textContent = '';
+        document.getElementById('query-display').innerHTML =
+          `<span style="color:var(--danger)">⚠️ ${err.message}</span>`;
+        document.getElementById('results-list').innerHTML = `
+          <div class="empty-state" style="padding:40px">
+            <div class="icon">⚠️</div>
+            <h3>Cannot reach FalconEye API</h3>
+            <p style="max-width:500px;margin:0 auto;line-height:1.8">
+              Make sure the server is running:<br>
+              <code style="background:var(--bg-secondary);padding:6px 12px;border-radius:6px;font-size:13px;display:inline-block;margin-top:8px">
+                .venv/bin/uvicorn app:app --port 8000
+              </code><br><br>
+              Then open <a href="http://localhost:8000" style="color:var(--accent)">http://localhost:8000</a>
+            </p>
+          </div>`;
+      } finally {
+        btn.classList.remove('loading');
+        btn.disabled = false;
+      }
+    });
+
+    // ── Render Results ──
+    function renderResults(data, elapsed) {
+      document.getElementById('empty-state').style.display = 'none';
+      const section = document.getElementById('results-section');
+      section.style.display = 'block';
+
+      // Query display
+      document.getElementById('query-display').innerHTML =
+        `<span style="color:var(--text-muted)">Query →</span> "${data.query_text}"`;
+
+      // Meta
+      document.getElementById('results-title').textContent =
+        `${data.matches.length} Vehicle${data.matches.length !== 1 ? 's' : ''} Found`;
+      document.getElementById('meta-captures').textContent =
+        `📸 ${data.total_captures_searched.toLocaleString()} captures searched`;
+      document.getElementById('meta-matches').textContent =
+        `🚗 ${data.matches.length} unique vehicles`;
+      document.getElementById('meta-time').textContent = `⏱️ ${elapsed}s`;
+
+      // Results list
+      const list = document.getElementById('results-list');
+      list.innerHTML = '';
+
+      if (data.matches.length === 0) {
+        list.innerHTML = `
+          <div class="empty-state" style="padding:40px">
+            <div class="icon">🔍</div>
+            <h3>No matches found</h3>
+            <p>Try a broader description or fewer filters.</p>
+          </div>`;
+        return;
+      }
+
+      data.matches.forEach((match, idx) => {
+        const card = document.createElement('div');
+        card.className = 'result-card';
+        card.style.animationDelay = `${idx * 0.06}s`;
+
+        const rankClass = match.rank <= 3 ? `rank-${match.rank}` : 'rank-default';
+        const probPct = (match.probability * 100).toFixed(1);
+        const probClass = match.probability > 0.15 ? 'prob-high'
+                        : match.probability > 0.05 ? 'prob-medium' : 'prob-low';
+
+        // Camera trail HTML
+        const trailHTML = match.camera_trail.map((cam, i) =>
+          (i > 0 ? '<span class="trail-arrow">→</span>' : '') +
+          `<span class="trail-node">${cam}</span>`
+        ).join('');
+
+        // Format last seen time
+        const lastTime = match.last_seen_time.replace('T', ' ').replace('Z', '');
+
+        // Sightings HTML
+        const sightingsHTML = match.all_sightings.map(s => `
+          <div class="sighting-row">
+            <span class="sighting-camera">${s.camera}</span>
+            <span class="sighting-time">${s.timestamp.split('T')[1].replace('Z','')}</span>
+            <span class="sighting-desc">${s.description}</span>
+            <span class="sighting-score">${(s.similarity * 100).toFixed(1)}%</span>
+          </div>
+        `).join('');
+
+        const markersHTML = match.true_markers.length > 0
+          ? match.true_markers.map(m => `<span style="
+              display:inline-block; padding:3px 10px; border-radius:100px;
+              background:var(--bg-glass); border:1px solid var(--border);
+              font-size:12px; color:var(--text-secondary); margin-right:4px;
+            ">${m}</span>`).join('')
+          : '<span style="color:var(--text-muted);font-size:13px">None</span>';
+
+        card.innerHTML = `
+          <div class="result-top">
+            <div style="display:flex;gap:16px;align-items:flex-start">
+              <div class="result-rank ${rankClass}">#${match.rank}</div>
+              <div class="result-identity">
+                <h3>
+                  ${match.true_color} ${match.true_body_type}
+                  <span class="vehicle-id-badge">${match.vehicle_id}</span>
+                </h3>
+                <span class="plate">🔖 ${match.true_plate}</span>
+              </div>
+            </div>
+            <div class="probability-badge">
+              <div class="probability-value ${probClass}">${probPct}%</div>
+              <div class="probability-label">Match Probability</div>
+            </div>
+          </div>
+
+          <div class="result-stats">
+            <div class="stat-box">
+              <div class="stat-label">Last Seen</div>
+              <div class="stat-value">${match.last_seen_camera}</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Last Time</div>
+              <div class="stat-value">${lastTime}</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Sightings</div>
+              <div class="stat-value">${match.match_count}</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Markers</div>
+              <div class="stat-value" style="font-family:inherit;font-size:13px">${markersHTML}</div>
+            </div>
+          </div>
+
+          <div>
+            <div style="font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">Camera Trail</div>
+            <div class="camera-trail">${trailHTML}</div>
+          </div>
+
+          <button class="sightings-toggle" onclick="this.nextElementSibling.classList.toggle('open');this.textContent=this.nextElementSibling.classList.contains('open')?'▲ Hide Sightings':'▼ Show All ${match.match_count} Sightings'">
+            ▼ Show All ${match.match_count} Sightings
+          </button>
+          <div class="sightings-list">
+            <div class="sighting-row" style="border-bottom:1px solid var(--border-hover)">
+              <span style="font-size:11px;color:var(--text-muted);text-transform:uppercase">Camera</span>
+              <span style="font-size:11px;color:var(--text-muted);text-transform:uppercase">Time</span>
+              <span style="font-size:11px;color:var(--text-muted);text-transform:uppercase">Description</span>
+              <span style="font-size:11px;color:var(--text-muted);text-transform:uppercase">Score</span>
+            </div>
+            ${sightingsHTML}
+          </div>
+        `;
+
+        list.appendChild(card);
+      });
+
+      // Smooth scroll to results
+      section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  </script>
+</body>
+</html>

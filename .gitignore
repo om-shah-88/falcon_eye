@@ -1,0 +1,15 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# macOS
+.DS_Store
+
+# Databases / Generated Storage
+chroma_db/
+
+# (Note: synthetic_camera_data.json and ground_truth.json are left untracked in this ignore file 
+# so they can be saved to git, but you can add them here if you prefer to only keep the scripts)
